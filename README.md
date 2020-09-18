@@ -35,7 +35,7 @@
 
 1. Установить composer, если он не установлен;
 2. Перейти в каталог, в который вы будете клонировать проект;
-3. Выполнить команду `composer require geraskin_vm/guess-number`;
+3. Выполнить команду `composer require bulatova/guess-number`;
 4. Перейти в каталог vendor/bin;
 5. Запустить файл guess-number.bat.
 
@@ -43,4 +43,4 @@
 
 ## Ссылки
 
-Packagist: <https://packagist.org/packages/geraskin_vm/guess-number>
+Packagist: <https://packagist.org/packages/bulatova/guess-number>
