@@ -2,6 +2,7 @@
 
 namespace GulyaBulatova\guessnumber\Model;
 
+use function cli\prompt;
 use function GulyaBulatova\guessnumber\View\greeting;
 use function GulyaBulatova\guessnumber\View\endGame;
 use function GulyaBulatova\guessnumber\View\MenuGame;
@@ -16,6 +17,7 @@ function setting()
 {
     define("MAX_NUM", 8);
     define("NUM_ATTEMPT", 4);
+    define('DB_NAME', 'gamedb.db');
 }
 
 function showGame($user_name)
@@ -61,8 +63,8 @@ function showGame($user_name)
 
 function replayGame($user_name)
 {
-    echo $user_name . ', Попробуешь еще раз? (y ="Да" / n = "Нет")' . PHP_EOL;
-    echo 'Или в другой раз? (--exit - Выход из игры | --menu - Меню игры)' . PHP_EOL;
+    echo $user_name . ', попробуешь еще раз? (y ="Да" / n = "Нет")' . PHP_EOL;
+    echo 'Или в следующий раз? (--exit - Выход из игры | --menu - Меню игры)' . PHP_EOL;
     $replay_game = readline();
 
     if ($replay_game === 'y' || $replay_game === 'Y') {
@@ -112,6 +114,6 @@ function commandHandler($getCommand)
             exit;
         }
 
-        $getCommand = \cli\prompt("Введите ключ");
+        $getCommand = prompt("Введите ключ");
     }
 }

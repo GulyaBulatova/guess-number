@@ -5,153 +5,146 @@ namespace GulyaBulatova\guessnumber\DataBase;
 use function GulyaBulatova\guessnumber\View\outputGamesInfo;
 use function GulyaBulatova\guessnumber\View\outputTurnInfo;
 use function GulyaBulatova\guessnumber\View\outputGamesInfoTop;
-
-function createDatabase()
-{
-    $db = new \SQLite3('gamedb.db');
-
-    $gamesInfoTable = "CREATE TABLE gamesInfo(
-        idGame INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-        gameData DATE,
-        gameTime TIME,
-        playerName TEXT,
-        maxNumber INTEGER,
-		generatedNumber INTEGER,
-		gameOutcome TEXT
-	 )";
-    $db->exec($gamesInfoTable);
-
-
-    $attemptsTable = "CREATE TABLE attempts(
-		 idGame INTEGER,
-		 numberAttempts INTEGER,
-		 proposedNumber INTEGER,
-		 computerResponds TEXT
-	 )";
-    $db->exec($attemptsTable);
-}
+use RedBeanPHP\R;
 
 function openDatabase()
 {
-    if (!file_exists("gamedb.db")) {
-        createDatabase();
-    } else {
-        $db = new \SQLite3('gamedb.db');
+    if (!file_exists(DB_NAME)) {
+        new \SQLite3(DB_NAME);
+    }
+
+    if (!R::testConnection()) {
+        R::setup('sqlite:' . DB_NAME);
     }
 }
 
 function insertNewGame($user_name, $hidden_num, $MAX_NUM)
 {
-    $db = new \SQLite3('gamedb.db');
+    if (!R::testConnection()) {
+        R::setup('sqlite:' . DB_NAME);
+    }
 
     date_default_timezone_set("Europe/Moscow");
 
     $gameData = date("d") . "." . date("m") . "." . date("Y");
     $gameTime = date("H") . ":" . date("i") . ":" . date("s");
 
-    $query = "INSERT INTO gamesInfo(
-		gameData,
-		gameTime,
-		playerName,
-		maxNumber,
-		generatedNumber
-   ) VALUES(
-		'$gameData',
-      '$gameTime',
-		'$user_name',
-		'$MAX_NUM',
-		'$hidden_num'
-   )";
+    $gamesInfo = R::dispense('gamesinfo');
 
-    $db->exec($query);
+    $gamesInfo->gameData = $gameData;
+    $gamesInfo->gameTime = $gameTime;
+    $gamesInfo->playerName = $user_name;
+    $gamesInfo->maxNumber = $MAX_NUM;
+    $gamesInfo->generatedNumber = $hidden_num;
+    $gamesInfo->gameOutcome = "...";
 
-    $query = "SELECT idGame FROM gamesInfo ORDER BY idGame DESC LIMIT 1";
+    R::store($gamesInfo);
 
-    return $db->querySingle($query);
+    $lastGameID = R::getCol("SELECT id FROM gamesinfo ORDER BY id DESC LIMIT 1");
+
+    return $lastGameID[0];
 }
 
 function addAttemptInDB($idGame, $proposedNumber, $computerResponds, $numberAttempts)
 {
-    $db = new \SQLite3('gamedb.db');
+    if (!R::testConnection()) {
+        R::setup('sqlite:' . DB_NAME);
+    }
 
-    $query = "INSERT INTO attempts(
-	    idGame,
-	    numberAttempts,
-		proposedNumber,
-		computerResponds
-    ) VALUES(
-        '$idGame',
-        '$numberAttempts',
-        '$proposedNumber',
-        '$computerResponds'
-    )";
+    $attempts = R::dispense('attempts');
 
-    $db->exec($query);
+    $attempts->idGame = $idGame;
+    $attempts->numberAttempts = $numberAttempts;
+    $attempts->proposedNumber = $proposedNumber;
+    $attempts->computerResponds = $computerResponds;
+
+    R::store($attempts);
+    R::close();
 }
 
 function updateInfoGame($idGame, $gameOutcome)
 {
-    $db = new \SQLite3('gamedb.db');
+    if (!R::testConnection()) {
+        R::setup('sqlite:' . DB_NAME);
+    }
 
-    $query = "UPDATE gamesInfo SET gameOutcome = '$gameOutcome' WHERE idGame = '$idGame'";
+    $gamesInfo = R::load('gamesinfo', $idGame);
 
-    $db->exec($query);
+    $gamesInfo->gameOutcome = $gameOutcome;
+
+    R::store($gamesInfo);
+    R::close();
 }
 
 function outputListGame($gameOutcome = false)
 {
-    $db = new \SQLite3('gamedb.db');
+    if (!R::testConnection()) {
+        R::setup('sqlite:' . DB_NAME);
+    }
 
     if ($gameOutcome === "win") {
-        $result = $db->query("SELECT * FROM gamesInfo WHERE gameOutcome = '$gameOutcome'");
+        $result = R::getAll('SELECT * FROM gamesinfo WHERE game_outcome = :gameOutcome',
+            array(':gameOutcome' => $gameOutcome)
+        );
     } elseif ($gameOutcome === "loss") {
-        $result = $db->query("SELECT * FROM gamesInfo WHERE gameOutcome = '$gameOutcome'");
+        $result = R::getAll('SELECT * FROM gamesinfo WHERE game_outcome = :gameOutcome',
+            array(':gameOutcome' => $gameOutcome)
+        );
     } else {
-        $result = $db->query("SELECT * FROM gamesInfo");
+        $result = R::getAll('SELECT * FROM gamesinfo');
     }
 
-    while ($row = $result->fetchArray()) {
-        outputGamesInfo($row);
+    foreach ($result as $value) {
+        outputGamesInfo($value);
 
-        $query = "SELECT
-            numberAttempts,
-            proposedNumber, 
-            computerResponds
-            FROM attempts 
-            WHERE idGame='$row[0]'
-            ";
+        $gameTurns = R::getAll("SELECT
+            number_attempts,
+            proposed_number,
+            computer_responds
+            FROM attempts
+            WHERE id_game = :id
+            ", array(':id' => $value['id']));
 
-        $gameTurns = $db->query($query);
-        while ($gameTurnsRow = $gameTurns->fetchArray()) {
-            outputTurnInfo($gameTurnsRow);
+        foreach ($gameTurns as $values) {
+            outputTurnInfo($values);
         }
     }
+
+    R::close();
 }
 
 function outputListGameTop()
 {
-    $db = new \SQLite3('gamedb.db');
-
-    $result = $db->query("SELECT playerName, 
-    (SELECT COUNT(*) FROM gamesInfo as b WHERE a.playerName = b.playerName AND gameOutcome = 'win') as countWin,
-    (SELECT COUNT(*) FROM gamesInfo as c WHERE a.playerName = c.playerName AND gameOutcome = 'loss') 
-    as countLoss FROM gamesInfo as a
-    GROUP BY playerName ORDER BY countWin DESC, countLoss");
-
-    while ($row = $result->fetchArray()) {
-        outputGamesInfoTop($row);
+    if (!R::testConnection()) {
+        R::setup('sqlite:' . DB_NAME);
     }
+
+    $result = R::getAll("SELECT player_name, 
+    (SELECT COUNT(*) FROM gamesinfo as b WHERE a.player_name = b.player_name AND game_outcome = 'win') as countWin,
+    (SELECT COUNT(*) FROM gamesinfo as c WHERE a.player_name = c.player_name AND game_outcome = 'loss') 
+    as countLoss FROM gamesinfo as a
+    GROUP BY player_name ORDER BY countWin DESC, countLoss");
+
+    foreach ($result as $value) {
+        outputGamesInfoTop($value);
+    }
+
+    R::close();
 }
 
 function checkGameId($id)
 {
-    $db = new \SQLite3('gamedb.db');
-
-    $query = "SELECT playerName FROM gamesInfo WHERE idGame=" . $id;
-
-    if ($db->querySingle($query)) {
-        return $db->querySingle($query);
+    if (!R::testConnection()) {
+        R::setup('sqlite:' . DB_NAME);
     }
+
+    $checkGameID = R::getCol("SELECT player_name FROM gamesinfo WHERE id = :id", array(':id' => $id));
+
+    if (!empty($checkGameID[0])) {
+        return $checkGameID[0];
+    }
+
+    R::close();
 
     return false;
 }
